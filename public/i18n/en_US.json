@@ -84,6 +84,7 @@
     "scheduledPublishSuccess": "Scheduled publish succeeded",
     "scheduledPublishReviewing": "Scheduled publish submitted, under review",
     "scheduledPublishFailed": "Scheduled publish failed",
+    "refreshingStatus": "Refreshing status…",
     "aiDockTitle": "AI Assistant",
     "aiNewChat": "New chat",
     "aiSettings": "Settings",
@@ -120,5 +121,6 @@
     "aiYolo": "YOLO",
     "aiYoloHint": "YOLO mode: auto-approve all write operations without asking",
     "aiSystemPrompt": "System prompt (custom)",
-    "aiSystemPromptPlaceholder": "Appended after the built-in prompt, e.g. tone, output format, naming"
+    "aiSystemPromptPlaceholder": "Appended after the built-in prompt, e.g. tone, output format, naming",
+    "aiImageResult": "🖼 Image loaded"
 }

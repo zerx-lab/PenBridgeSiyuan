@@ -84,6 +84,7 @@
     "scheduledPublishSuccess": "定时发布成功",
     "scheduledPublishReviewing": "定时发布已提交，正在审核中",
     "scheduledPublishFailed": "定时发布失败",
+    "refreshingStatus": "正在刷新状态…",
     "aiDockTitle": "AI 助手",
     "aiNewChat": "新对话",
     "aiSettings": "设置",
@@ -120,5 +121,6 @@
     "aiYolo": "YOLO",
     "aiYoloHint": "YOLO 模式：自动同意所有写操作，不再逐一确认",
     "aiSystemPrompt": "系统提示词（自定义）",
-    "aiSystemPromptPlaceholder": "在内置提示词后追加自定义指令，例如语气、输出格式、命名偏好"
+    "aiSystemPromptPlaceholder": "在内置提示词后追加自定义指令，例如语气、输出格式、命名偏好",
+    "aiImageResult": "🖼 已读取图片"
 }

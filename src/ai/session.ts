@@ -1,6 +1,6 @@
 import { Agent, type AgentMessage } from "@earendil-works/pi-agent-core";
 import { getModels, type KnownProvider } from "@earendil-works/pi-ai";
-import { siyuanTools, WRITE_TOOLS } from "./tools";
+import { siyuanTools, WRITE_TOOLS, createReadImageTool } from "./tools";
 import type { AgentConfig } from "./config";
 
 export interface ActiveDocInfo {
@@ -20,7 +20,7 @@ const WRITE_ENDPOINT_RE =
 const BASE_SYSTEM_PROMPT = `You are an AI assistant embedded in the SiYuan (思源笔记) note app, shown in a side panel. You read, search, and edit the user's notes by calling tools that talk directly to the SiYuan kernel.
 
 ## Tools
-Prefer the dedicated tools: get_active_document, read_document, list_blocks, read_block, update_block, append_block, insert_block, delete_block, sql_query, list_notebooks, create_document.
+Prefer the dedicated tools: get_active_document, read_document, list_blocks, read_block, update_block, append_block, insert_block, delete_block, sql_query, list_notebooks, create_document, read_image.
 Escape hatch: siyuan_api(endpoint, payload) calls ANY of the ~460 kernel endpoints for what the dedicated tools don't cover — move/fold blocks, block attributes, full-text search, templates, transactions, attribute-view (database) blocks, files. Examples: block/moveBlock, attr/setBlockAttrs, search/fullTextSearchBlock, notebook/createNotebook, filetree/renameDocByID, template/render.
 
 ## SiYuan data model
@@ -44,8 +44,15 @@ Common queries:
 - Reply in the user's language. Be concise. After editing, briefly state what changed.`;
 
 /** 拼接系统提示，注入当前激活文档，让"当前文档/this document"有明确指向。 */
-export function buildSystemPrompt(activeDoc?: ActiveDocInfo, custom?: string): string {
+export function buildSystemPrompt(activeDoc?: ActiveDocInfo, custom?: string, supportsImage = false): string {
     let prompt = BASE_SYSTEM_PROMPT;
+    if (supportsImage) {
+        prompt +=
+            "\n\n## Images\nThis model can see images. Documents reference images with Markdown ![alt](src) where src is usually a SiYuan asset path like assets/foo.png. When the user asks about an image, or understanding a picture matters for the task, call read_image with that src to actually view it instead of guessing from the filename or alt text.";
+    } else {
+        prompt +=
+            "\n\n## Images\nThe current model is text-only and cannot view images. If the user asks about the content of a picture, tell them to switch to a vision-capable (multimodal) model in the AI settings; do not pretend to have seen the image.";
+    }
     if (activeDoc?.docId) {
         prompt += `\n\nCurrently focused document: "${activeDoc.title}" (id: ${activeDoc.docId}, path: ${activeDoc.hpath}).`;
     } else {
@@ -87,12 +94,14 @@ export function createSiyuanAgent(opts: CreateAgentOptions): Agent {
     // 自定义端点：克隆 model 覆盖 baseUrl，避免污染共享的 model registry。
     const baseUrl = config.baseUrl.trim();
     const model = baseUrl ? { ...found, baseUrl } : found;
+    // 视觉能力以 model registry 的 input 模态为准；据此 gate read_image 并调整提示词。
+    const supportsImage = Array.isArray(model.input) && model.input.includes("image");
 
     return new Agent({
         initialState: {
-            systemPrompt: buildSystemPrompt(activeDoc, config.systemPrompt),
+            systemPrompt: buildSystemPrompt(activeDoc, config.systemPrompt, supportsImage),
             model,
-            tools: siyuanTools,
+            tools: [...siyuanTools, createReadImageTool(supportsImage)],
             messages: messages ?? [],
         },
         getApiKey: async () => config.apiKey,

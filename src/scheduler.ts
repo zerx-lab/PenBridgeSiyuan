@@ -7,8 +7,9 @@
  */
 import { showMessage, type Plugin } from "siyuan";
 import { exportMdContent } from "./api";
+import { TencentClient } from "./tencent/client";
 import { runPublishJob } from "./tencent/publish";
-import type { TagInfo } from "./tencent/types";
+import type { TagInfo, TencentConfig } from "./tencent/types";
 import { logger } from "./logger";
 
 export const TASKS_KEY = "scheduled-tasks";
@@ -50,6 +51,21 @@ export function formatDateTime(ms?: number): string {
     return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
+/**
+ * 腾讯云创作中心文章状态 → 任务状态
+ * 移植自 penBridge articleSync.getStatusText：
+ * - hostStatus=2（已提交发布）：status=2 已发布，其余审核中
+ * - hostStatus=1 已发布(旧) → success
+ * - hostStatus=3 未通过 → failed
+ * - hostStatus=0 审核中 / 4 回收站 / 未知 → reviewing（保持不变）
+ */
+function mapArticleStatus(hostStatus: number, status?: number): TaskStatus {
+    if (hostStatus === 2) return status === 2 ? "success" : "reviewing";
+    if (hostStatus === 1) return "success";
+    if (hostStatus === 3) return "failed";
+    return "reviewing";
+}
+
 export class PublishScheduler {
     private plugin: Plugin;
     private tasks: ScheduledTask[] = [];
@@ -57,6 +73,7 @@ export class PublishScheduler {
     private executing = new Set<string>();
     private listeners = new Set<() => void>();
     private checking = false;
+    private refreshing = false;
 
     constructor(plugin: Plugin) {
         this.plugin = plugin;
@@ -82,6 +99,57 @@ export class PublishScheduler {
         if (this.timer !== undefined) return;
         void this.checkDueTasks();
         this.timer = window.setInterval(() => void this.checkDueTasks(), TICK_MS);
+    }
+
+    /**
+     * 拉取平台最新发布状态，刷新「审核中」任务（进入定时任务页时调用）。
+     * 仅在审核结果明确时（已发布 / 未通过）落库，避免与真实状态不一致。
+     */
+    async refreshStatuses(): Promise<void> {
+        if (this.refreshing) return;
+        // 仅审核中且已拿到 articleId 的腾讯任务需要回查
+        const reviewing = this.tasks.filter(
+            (t) => t.status === "reviewing" && t.platformId === "tencent" && !!t.articleId
+        );
+        if (reviewing.length === 0) return;
+
+        const config = (await this.plugin.loadData("tencent-config")) as TencentConfig;
+        if (!config?.cookie) return;
+
+        this.refreshing = true;
+        try {
+            const articles = await new TencentClient(config.cookie).fetchCreatorArticles({
+                hostStatus: 0,
+                page: 1,
+                pageSize: 50,
+            });
+            const byId = new Map(articles.map((a) => [a.articleId, a]));
+            const i18n: any = this.plugin.i18n;
+
+            let dirty = false;
+            for (const task of reviewing) {
+                const art = byId.get(task.articleId!);
+                if (!art) continue;
+                const next = mapArticleStatus(art.hostStatus, art.status);
+                if (next === "success") {
+                    task.status = "success";
+                    task.error = undefined;
+                    dirty = true;
+                } else if (next === "failed") {
+                    task.status = "failed";
+                    task.error = art.rejectInfo?.reason || i18n.publishReviewFailed;
+                    dirty = true;
+                }
+            }
+            if (dirty) {
+                await this.persist();
+                this.notify();
+            }
+        } catch (e) {
+            logger.error("refreshStatuses failed:", e);
+        } finally {
+            this.refreshing = false;
+        }
     }
 
     destroy(): void {

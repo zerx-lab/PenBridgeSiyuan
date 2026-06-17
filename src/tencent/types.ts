@@ -30,6 +30,24 @@ export interface PublishResult {
     status: number;
 }
 
+/** 文章审核拒绝信息（来自 /api/creator/articleList） */
+export interface ArticleRejectInfo {
+    auditTime: string;
+    createTime: string;
+    reason: string;
+}
+
+/** 创作中心文章信息（来自 /api/creator/articleList），用于刷新发布状态 */
+export interface CreatorArticleInfo {
+    articleId: number;
+    title: string;
+    /** 0-审核中, 1-已发布(旧), 2-已提交发布, 3-未通过, 4-回收站 */
+    hostStatus: number;
+    /** 当 hostStatus=2 时：2-发布成功，其他-审核中 */
+    status: number;
+    rejectInfo?: ArticleRejectInfo;
+}
+
 /** 按思源文档 id 存储的发布记录 */
 export interface PublishRecord {
     draftId?: number;

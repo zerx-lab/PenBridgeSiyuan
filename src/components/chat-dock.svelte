@@ -239,6 +239,15 @@
         return out;
     }
 
+    function imageCount(content: unknown): number {
+        if (!Array.isArray(content)) return 0;
+        let n = 0;
+        for (const b of content) {
+            if (b && typeof b === "object" && (b as { type?: unknown }).type === "image") n++;
+        }
+        return n;
+    }
+
     function toolCalls(content: unknown): ToolCall[] {
         if (!Array.isArray(content)) return [];
         const out: ToolCall[] = [];
@@ -262,10 +271,15 @@
             } else if (msg.role === "assistant") {
                 out.push({ kind: "assistant", text: blockText(msg.content), tools: toolCalls(msg.content) });
             } else if (msg.role === "toolResult") {
+                let text = blockText(msg.content);
+                if (!text) {
+                    const imgs = imageCount(msg.content);
+                    if (imgs > 0) text = imgs > 1 ? `${i18n.aiImageResult} ×${imgs}` : i18n.aiImageResult;
+                }
                 out.push({
                     kind: "tool",
                     name: typeof msg.toolName === "string" ? msg.toolName : "",
-                    text: blockText(msg.content),
+                    text,
                     isError: msg.isError === true,
                 });
             }

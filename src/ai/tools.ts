@@ -12,12 +12,68 @@ import {
     createDocWithMd,
     lsNotebooks,
     request,
+    getFileBlob,
 } from "../api";
 import { getActiveDocId } from "../active-doc";
 
 /** 工具结果统一封装为单条文本块（pi-ai toolResult 内容格式）。 */
 function toolText(text: string) {
     return { content: [{ type: "text" as const, text }], details: {} };
+}
+
+/** 图片工具结果：单个 image 内容块，供视觉模型直接"看图"。 */
+function toolImage(data: string, mimeType: string) {
+    return { content: [{ type: "image" as const, data, mimeType }], details: {} };
+}
+
+/** 扩展名 → MIME，兜底用（内核未给 Content-Type 时）。 */
+const IMAGE_EXT_MIME: Record<string, string> = {
+    png: "image/png",
+    jpg: "image/jpeg",
+    jpeg: "image/jpeg",
+    gif: "image/gif",
+    webp: "image/webp",
+    bmp: "image/bmp",
+    svg: "image/svg+xml",
+    avif: "image/avif",
+    ico: "image/x-icon",
+    tif: "image/tiff",
+    tiff: "image/tiff",
+    heic: "image/heic",
+    heif: "image/heif",
+};
+
+function guessImageMime(ref: string): string {
+    const ext = ref.split(/[?#]/)[0].split(".").pop()?.toLowerCase() ?? "";
+    return IMAGE_EXT_MIME[ext] ?? "";
+}
+
+/**
+ * 把 markdown 里的图片引用解析为内核 getFile 的工作区路径。
+ * - `assets/foo.png`（思源资源）→ `/data/assets/foo.png`
+ * - 绝对工作区路径 `/data/...` 原样返回
+ * - 其它相对路径按 `/data/<ref>` 处理
+ */
+function resolveImagePath(ref: string): string {
+    if (ref.startsWith("/")) return ref;
+    return `/data/${ref.replace(/^\.\//, "")}`;
+}
+
+/** Blob → { base64 data, mimeType }，用 FileReader 一次拿到 data URL 再拆解。 */
+function blobToImageContent(blob: Blob): Promise<{ data: string; mimeType: string }> {
+    return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onerror = () => reject(new Error("Failed to read image bytes."));
+        reader.onload = () => {
+            const m = /^data:([^;,]*)[^,]*,(.*)$/s.exec(String(reader.result));
+            if (!m || !m[2]) {
+                reject(new Error("Failed to encode image."));
+                return;
+            }
+            resolve({ mimeType: m[1] || "", data: m[2] });
+        };
+        reader.readAsDataURL(blob);
+    });
 }
 
 const ReadDocSchema = Type.Object({
@@ -60,6 +116,13 @@ const CreateDocSchema = Type.Object({
     notebook: Type.String({ description: "Notebook id (see list_notebooks)" }),
     path: Type.String({ description: "Human path like /Inbox/My Note" }),
     markdown: Type.String({ description: "Initial Markdown content" }),
+});
+
+const ReadImageSchema = Type.Object({
+    src: Type.String({
+        description:
+            "Image source as it appears in the note's Markdown image syntax ![alt](src): a SiYuan asset path like 'assets/foo-20230101.png', an absolute workspace path like '/data/assets/foo.png', or an http(s) URL.",
+    }),
 });
 
 /**
@@ -226,6 +289,64 @@ export const siyuanTools: AgentTool[] = [
         },
     },
 ];
+
+/**
+ * read_image：把文章内的图片读成 image 内容块交给视觉模型"看"。
+ * 工厂注入 supportsImage：当前模型不支持图片输入时直接抛出明确错误，
+ * 避免把图片塞给纯文本模型后收到难懂的接口报错。
+ */
+export function createReadImageTool(supportsImage: boolean): AgentTool {
+    return {
+        name: "read_image",
+        label: "Read image",
+        description:
+            "View an image embedded in a note so you can actually see its content. Pass the image source from the Markdown image syntax ![alt](src) — usually a SiYuan asset path like 'assets/foo.png'. Returns the image to the model. Requires a vision-capable model; with a text-only model this fails with a clear error.",
+        parameters: ReadImageSchema,
+        execute: async (_id, params) => {
+            if (!supportsImage) {
+                throw new Error(
+                    "The current model does not support image input (text only). Ask the user to switch to a vision-capable (multimodal) model in the AI settings, then retry.",
+                );
+            }
+            const ref = (params as Static<typeof ReadImageSchema>).src.trim();
+            if (!ref) throw new Error("Image source must not be empty.");
+
+            let blob: Blob;
+            if (/^https?:\/\//i.test(ref)) {
+                let res: Response;
+                try {
+                    res = await fetch(ref);
+                } catch (e) {
+                    throw new Error(`Failed to fetch remote image: ${ref} (${e instanceof Error ? e.message : String(e)})`);
+                }
+                if (!res.ok) throw new Error(`Failed to fetch remote image: ${ref} (HTTP ${res.status}).`);
+                blob = await res.blob();
+            } else {
+                const path = resolveImagePath(ref);
+                const got = await getFileBlob(path);
+                if (!got) throw new Error(`Image not found or unreadable: ${path}`);
+                blob = got;
+            }
+
+            // 内核对不存在的文件会返回 JSON 错误体（HTTP 200），按非图片处理并透出原因。
+            if (blob.type.includes("json") || (blob.type.startsWith("text/") && !blob.type.includes("svg"))) {
+                let detail = "";
+                try {
+                    detail = (await blob.text()).slice(0, 200);
+                } catch {
+                    // 读不到正文则只报路径
+                }
+                throw new Error(`Failed to read image: ${ref}${detail ? ` (${detail})` : ""}`);
+            }
+
+            const { data, mimeType } = await blobToImageContent(blob);
+            if (!data) throw new Error(`Image content is empty: ${ref}`);
+            const mime = mimeType.startsWith("image/") ? mimeType : guessImageMime(ref);
+            if (!mime) throw new Error(`Unsupported or unknown image type: ${ref}`);
+            return toolImage(data, mime);
+        },
+    };
+}
 
 /** 写操作工具名表，对话面板用于"执行前确认"。 */
 export const WRITE_TOOLS: Record<string, true> = {

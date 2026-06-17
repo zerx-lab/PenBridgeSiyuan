@@ -12,6 +12,7 @@
     let now: number = Date.now();
     let unsubscribe: (() => void) | undefined;
     let clock: number | undefined;
+    let refreshing: boolean = false;
 
     $: hasFinished = tasks.some((t) => t.status !== "pending" && t.status !== "running");
     $: pendingCount = tasks.filter((t) => t.status === "pending" || t.status === "running").length;
@@ -21,6 +22,9 @@
         unsubscribe = plugin.scheduler.subscribe(refresh);
         // 每 30s 刷新一次「已到期」等与当前时间相关的展示
         clock = window.setInterval(() => { now = Date.now(); }, 30_000);
+        // 进入页面拉取平台最新发布状态，避免审核中任务与真实状态不一致
+        refreshing = true;
+        plugin.scheduler.refreshStatuses().finally(() => { refreshing = false; });
     });
 
     onDestroy(() => {
@@ -61,6 +65,12 @@
             <span class="pb-tasks__title">{i18n.scheduledTasks}</span>
             {#if pendingCount > 0}
                 <span class="pb-tasks__count">{pendingCount}</span>
+            {/if}
+            {#if refreshing}
+                <span class="pb-tasks__refreshing">
+                    <span class="pb-tasks__refreshing-spinner"></span>
+                    {i18n.refreshingStatus}
+                </span>
             {/if}
         </div>
         {#if hasFinished}
@@ -189,6 +199,23 @@
             box-sizing: border-box;
             background-color: var(--b3-theme-primary);
             color: var(--b3-theme-on-primary, #fff);
+        }
+
+        &__refreshing {
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+            font-size: 11px;
+            color: var(--b3-theme-on-surface-light);
+        }
+
+        &__refreshing-spinner {
+            width: 10px;
+            height: 10px;
+            border: 1.5px solid currentColor;
+            border-top-color: transparent;
+            border-radius: 50%;
+            animation: pb-spin 0.8s linear infinite;
         }
 
         &__list {

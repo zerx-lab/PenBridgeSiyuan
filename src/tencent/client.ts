@@ -4,7 +4,7 @@
  * 移植自 penBridge/packages/server/src/services/tencentApi.ts
  */
 import { forwardProxy } from "../api";
-import type { TagInfo, DraftResult, PublishResult, ImageUploadInfo, CosTmpSecret } from "./types";
+import type { TagInfo, DraftResult, PublishResult, ImageUploadInfo, CosTmpSecret, CreatorArticleInfo } from "./types";
 import { buildSummary } from "./markdown";
 import { logger } from "../logger";
 
@@ -221,6 +221,20 @@ export class TencentClient {
             draftId: data?.draftId ?? params.draftId ?? 0,
             status: data?.status ?? 0,
         };
+    }
+
+    /** 获取创作中心文章列表，用于刷新发布状态（含审核失败原因） */
+    async fetchCreatorArticles(
+        params: { hostStatus?: number; page?: number; pageSize?: number } = {}
+    ): Promise<CreatorArticleInfo[]> {
+        const result = await this.request<any>("/api/creator/articleList", {
+            hostStatus: params.hostStatus ?? 0,
+            sortType: "create",
+            page: params.page ?? 1,
+            pageSize: params.pageSize ?? 50,
+        });
+        const data = result?.data && typeof result.data === "object" ? result.data : result;
+        return Array.isArray(data?.list) ? data.list : [];
     }
 
     /** 获取 COS 上传信息 */
