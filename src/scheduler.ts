@@ -199,7 +199,8 @@ export class PublishScheduler {
 
         try {
             // 执行时重新导出，发布文档最新内容
-            const res = await exportMdContent(task.docId);
+            // addTitle/yfm 关闭：标题由任务单独提交，避免正文顶部重复标题
+            const res = await exportMdContent(task.docId, { addTitle: false, yfm: false });
             if (!res?.content) throw new Error(i18n.taskDocMissing);
 
             const result = await runPublishJob(this.plugin, {

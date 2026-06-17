@@ -495,12 +495,14 @@ export const loadBlob = getFileBlob;
  * @param options.refMode 2: Anchor text block chain; 3: Anchor text only; 4: Block reference converted to footnote + anchor hash
  * @param options.embedMode 0: Use original text; 1: Use Blockquote
  * @param options.yfm Export YAML information or not
+ * @param options.addTitle Prepend the document title as a level-1 heading
  * @returns
  */
 export async function exportMdContent(id: DocumentId, options?: {
     refMode?: 2 | 3 | 4;
     embedMode?: 0 | 1;
     yfm?: boolean;
+    addTitle?: boolean;
 }): Promise<IResExportMdContent> {
     let data = {
         id: id,
