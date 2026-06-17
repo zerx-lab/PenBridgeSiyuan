@@ -1,0 +1,45 @@
+{
+  "name": "penbridge-siyuan",
+  "author": "zerx-lab",
+  "url": "https://github.com/zerx-lab/penbridge-siyuan",
+  "version": "0.1.0",
+  "minAppVersion": "3.0.0",
+  "backends": [
+    "windows",
+    "linux",
+    "darwin",
+    "ios",
+    "android",
+    "harmony",
+    "docker"
+  ],
+  "frontends": [
+    "desktop",
+    "desktop-window",
+    "browser-desktop"
+  ],
+  "displayName": {
+    "default": "PenBridge Publisher",
+    "zh_CN": "PenBridge 发布助手"
+  },
+  "description": {
+    "default": "Publish the current document to Tencent Cloud Developer Community with one click",
+    "zh_CN": "一键将当前文档发布到腾讯云开发者社区"
+  },
+  "readme": {
+    "default": "README.md",
+    "zh_CN": "README.md"
+  },
+  "funding": {
+    "openCollective": "",
+    "patreon": "",
+    "github": "",
+    "custom": []
+  },
+  "keywords": [
+    "publish",
+    "tencent",
+    "发布",
+    "腾讯云"
+  ]
+}

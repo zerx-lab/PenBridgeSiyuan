@@ -1,0 +1,87 @@
+/* PenBridge 插件全局样式 */
+
+.pb-publish {
+    .pb-field {
+        margin-bottom: 16px;
+
+        .pb-field__label {
+            display: block;
+            margin-bottom: 6px;
+            font-weight: 500;
+        }
+    }
+
+    .pb-invalid {
+        border-color: var(--b3-theme-error) !important;
+    }
+
+    .pb-warning {
+        color: var(--b3-theme-error);
+        margin-left: 8px;
+    }
+
+    .pb-no-result {
+        margin-top: 8px;
+    }
+
+    /* 已选标签 chips */
+    .pb-tag-chips {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+        margin-bottom: 8px;
+    }
+
+    .pb-tag-chip {
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        padding: 2px 10px;
+        border: 1px solid var(--b3-theme-primary);
+        border-radius: 12px;
+        color: var(--b3-theme-primary);
+        font-size: 12px;
+        line-height: 20px;
+        cursor: pointer;
+        user-select: none;
+        transition: background-color 0.15s ease;
+
+        &:hover {
+            background-color: var(--b3-theme-primary-lightest);
+        }
+
+        .pb-tag-chip__close {
+            width: 10px;
+            height: 10px;
+            fill: currentColor;
+        }
+    }
+
+    /* 标签搜索结果列表 */
+    .pb-tag-results {
+        margin-top: 8px;
+        max-height: 160px;
+        overflow-y: auto;
+        border: 1px solid var(--b3-border-color);
+        border-radius: var(--b3-border-radius);
+
+        .pb-tag-result {
+            cursor: pointer;
+
+            &:hover {
+                background-color: var(--b3-list-hover);
+            }
+
+            &.pb-tag-result--selected {
+                color: var(--b3-theme-primary);
+            }
+        }
+    }
+}
+
+/* 小号按钮（跨组件共用） */
+.pb-btn-sm {
+    padding: 4px 12px !important;
+    font-size: 12px !important;
+    line-height: 20px !important;
+}
