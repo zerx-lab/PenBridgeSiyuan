@@ -1,12 +1,18 @@
 <script lang="ts">
     import { onDestroy, onMount } from "svelte";
     import type PenBridgePlugin from "../index";
-    import { formatDateTime, type ScheduledTask, type TaskStatus } from "../scheduler";
+    import { currentDeviceId, formatDateTime, type ScheduledTask, type TaskStatus } from "../scheduler";
     import { PLATFORMS } from "../platforms/registry";
 
     export let plugin: PenBridgePlugin;
 
     const i18n: any = plugin.i18n;
+    const me = currentDeviceId();
+
+    /** 任务是否绑定到其他设备（非本机执行） */
+    function isOtherDevice(task: ScheduledTask): boolean {
+        return !!task.ownerDeviceId && !!me && task.ownerDeviceId !== me;
+    }
 
     let tasks: ScheduledTask[] = [];
     let now: number = Date.now();
@@ -114,6 +120,12 @@
                             </span>
                             <span class="pb-task__dot">·</span>
                             <span>{platformName(task.platformId)}</span>
+                            {#if isOtherDevice(task)}
+                                <span class="pb-task__dot">·</span>
+                                <span class="pb-task__device" title={i18n.taskOtherDeviceHint}>
+                                    💻 {i18n.taskOtherDevice}
+                                </span>
+                            {/if}
                             {#if task.tags.length > 0}
                                 <span class="pb-task__dot">·</span>
                                 <span class="pb-task__tags" title={task.tags.map((t) => t.tagName).join(", ")}>
@@ -133,14 +145,22 @@
                     </div>
                     <div class="pb-task__actions">
                         {#if task.status === "pending"}
-                            <button class="b3-button b3-button--text pb-btn-sm" on:click={() => plugin.scheduler.runNow(task.id)}>
+                            <button
+                                class="b3-button b3-button--text pb-btn-sm"
+                                title={isOtherDevice(task) ? i18n.taskRunHereHint : ""}
+                                on:click={() => plugin.scheduler.runNow(task.id)}
+                            >
                                 {i18n.runNow}
                             </button>
                             <button class="b3-button b3-button--outline pb-btn-sm" on:click={() => plugin.scheduler.cancelTask(task.id)}>
                                 {i18n.cancelTask}
                             </button>
                         {:else if task.status === "failed"}
-                            <button class="b3-button b3-button--text pb-btn-sm" on:click={() => plugin.scheduler.runNow(task.id)}>
+                            <button
+                                class="b3-button b3-button--text pb-btn-sm"
+                                title={isOtherDevice(task) ? i18n.taskRunHereHint : ""}
+                                on:click={() => plugin.scheduler.runNow(task.id)}
+                            >
                                 {i18n.retryTask}
                             </button>
                             <button class="b3-button b3-button--outline pb-btn-sm" on:click={() => plugin.scheduler.deleteTask(task.id)}>
@@ -302,6 +322,11 @@
 
         &__dot {
             opacity: 0.5;
+        }
+
+        &__device {
+            color: var(--b3-theme-on-surface-light);
+            white-space: nowrap;
         }
 
         &__tags {

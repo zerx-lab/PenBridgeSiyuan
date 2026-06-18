@@ -15,6 +15,14 @@ import { logger } from "./logger";
 export const TASKS_KEY = "scheduled-tasks";
 const TICK_MS = 30_000;
 
+/**
+ * 当前设备 ID。桌面端基于硬件稳定且跨设备唯一，是多设备去重的执行权依据。
+ * 取不到（异常环境）时返回空串，调用方据此降级为「不锁定」。
+ */
+export function currentDeviceId(): string {
+    return (window as any).siyuan?.config?.system?.id ?? "";
+}
+
 export type TaskStatus = "pending" | "running" | "success" | "reviewing" | "failed" | "canceled";
 
 export interface ScheduledTask {
@@ -32,6 +40,12 @@ export interface ScheduledTask {
     finishedAt?: number;
     error?: string;
     articleId?: number;
+    /**
+     * 执行该任务的设备 ID（window.siyuan.config.system.id）。
+     * 多设备同步同一份任务数据时，仅 owner 设备执行，避免重复发布。
+     * 兼容旧数据：缺省时由首个加载到的设备认领。
+     */
+    ownerDeviceId?: string;
 }
 
 /** 列表展示排序权重：进行中 > 待发布 > 失败 > 审核中 > 已发布 > 已取消 */
@@ -83,10 +97,18 @@ export class PublishScheduler {
     async load(): Promise<void> {
         const data = await this.plugin.loadData(TASKS_KEY);
         this.tasks = Array.isArray(data) ? data : [];
-        // 上次运行中途软件被关闭的任务恢复为待发布，等待重新执行
+        const me = currentDeviceId();
         let dirty = false;
         for (const task of this.tasks) {
-            if (task.status === "running") {
+            // 兼容旧数据：无 owner 的任务由首个加载到的设备认领，避免永不执行。
+            // 仅认领未结束的任务（pending/running），已结束任务无需归属。
+            if (!task.ownerDeviceId && me && (task.status === "pending" || task.status === "running")) {
+                task.ownerDeviceId = me;
+                dirty = true;
+            }
+            // 上次运行中途被强退的任务恢复为待发布——仅修复本设备 owner 的任务，
+            // 别的设备同步过来的 running 是其正在执行的状态，不能擅自改写。
+            if (task.status === "running" && (!task.ownerDeviceId || task.ownerDeviceId === me)) {
                 task.status = "pending";
                 dirty = true;
             }
@@ -198,6 +220,8 @@ export class PublishScheduler {
             ...params,
             createdAt: Date.now(),
             status: "pending",
+            // 绑定创建设备为执行者：仅该设备会执行此任务，杜绝多设备重复发布
+            ownerDeviceId: currentDeviceId(),
         };
         this.tasks.push(task);
         await this.persist();
@@ -235,6 +259,9 @@ export class PublishScheduler {
     async runNow(id: string): Promise<void> {
         const task = this.tasks.find((t) => t.id === id);
         if (!task || (task.status !== "pending" && task.status !== "failed")) return;
+        // 手动执行即用本设备：改写 owner，避免执行后原 owner 设备再次自动发布
+        const me = currentDeviceId();
+        if (me) task.ownerDeviceId = me;
         await this.execute(task);
     }
 
@@ -243,7 +270,15 @@ export class PublishScheduler {
         this.checking = true;
         try {
             const now = Date.now();
-            const due = this.tasks.filter((t) => t.status === "pending" && t.scheduledAt <= now);
+            const me = currentDeviceId();
+            // 仅自动执行本设备 owner 的任务，避免多设备同步同一份数据时重复发布。
+            // 无 owner（取不到设备 ID 的降级场景）按本设备处理，保证不漏发。
+            const due = this.tasks.filter(
+                (t) =>
+                    t.status === "pending" &&
+                    t.scheduledAt <= now &&
+                    (!t.ownerDeviceId || t.ownerDeviceId === me)
+            );
             // 串行执行，避免对平台 API 的并发冲击
             for (const task of due) {
                 await this.execute(task);
@@ -268,7 +303,8 @@ export class PublishScheduler {
         try {
             // 执行时重新导出，发布文档最新内容
             // addTitle/yfm 关闭：标题由任务单独提交，避免正文顶部重复标题
-            const res = await exportMdContent(task.docId, { addTitle: false, yfm: false });
+            // refMode=3（仅锚文本）：块引用只保留链接文字，避免被引文档整篇作为脚注混入正文
+            const res = await exportMdContent(task.docId, { addTitle: false, yfm: false, refMode: 3 });
             if (!res?.content) throw new Error(i18n.taskDocMissing);
 
             const result = await runPublishJob(this.plugin, {

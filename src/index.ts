@@ -190,7 +190,8 @@ export default class PenBridgePlugin extends Plugin {
 
         // 3. 导出 Markdown
         // addTitle/yfm 关闭：标题与标签由发布参数单独提交，避免正文顶部重复标题
-        const res = await exportMdContent(docId, { addTitle: false, yfm: false });
+        // refMode=3（仅锚文本）：块引用只保留链接文字，避免被引文档（如系列上一篇）整篇作为脚注混入正文
+        const res = await exportMdContent(docId, { addTitle: false, yfm: false, refMode: 3 });
         const markdown = res.content;
         if (!markdown) {
             showMessage(this.i18n.noDocOpen, 6000, "error");
