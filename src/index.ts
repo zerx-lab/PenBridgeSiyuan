@@ -11,6 +11,7 @@ import { exportMdContent } from "./api";
 import Settings from "./components/settings.svelte";
 import PublishDialog from "./components/publish-dialog.svelte";
 import ChatDock from "./components/chat-dock.svelte";
+import GithubDock from "./components/github-dock.svelte";
 import { PLATFORMS } from "./platforms/registry";
 import { PublishScheduler } from "./scheduler";
 import { logger } from "./logger";
@@ -39,6 +40,9 @@ export default class PenBridgePlugin extends Plugin {
 </symbol>
 <symbol id="iconPenBridgeCli" viewBox="0 0 32 32">
 <path d="M4 6h24a2 2 0 0 1 2 2v16a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2zm1 3v14h22V9H5zm3 2.5l5 4-5 4-1.7-1.5 3.2-2.5-3.2-2.5L8 11.5zM15 18h7v2h-7v-2z"></path>
+</symbol>
+<symbol id="iconPenBridgeGithub" viewBox="0 0 16 16">
+<path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0 0 16 8c0-4.42-3.58-8-8-8z"></path>
 </symbol>`);
     }
 
@@ -119,6 +123,29 @@ export default class PenBridgePlugin extends Plugin {
             destroy: () => {
                 chatDock?.$destroy();
                 chatDock = undefined;
+            },
+        });
+
+        // GitHub 项目管理面板：多仓库 + per-repo token，管理 issue/pr/labels
+        let githubDock: GithubDock | undefined;
+        this.addDock({
+            config: {
+                position: "RightBottom",
+                size: { width: 360, height: 0 },
+                icon: "iconPenBridgeGithub",
+                title: this.i18n.ghDockTitle,
+            },
+            data: {},
+            type: "penbridge-github-dock",
+            init: (dock) => {
+                githubDock = new GithubDock({
+                    target: dock.element,
+                    props: { plugin: this },
+                });
+            },
+            destroy: () => {
+                githubDock?.$destroy();
+                githubDock = undefined;
             },
         });
     }
